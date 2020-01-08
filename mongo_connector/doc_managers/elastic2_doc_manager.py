@@ -65,6 +65,7 @@ wrap_exceptions = exception_wrapper(
     {
         BulkIndexError: errors.OperationFailed,
         es_exceptions.ConnectionError: errors.ConnectionFailed,
+        es_exceptions.ConnectionTimeout: errors.ConnectionFailed,
         es_exceptions.TransportError: errors.OperationFailed,
         es_exceptions.NotFoundError: errors.OperationFailed,
         es_exceptions.RequestError: errors.OperationFailed,
