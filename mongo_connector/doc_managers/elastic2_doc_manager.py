@@ -24,6 +24,8 @@ import time
 import warnings
 
 import bson.json_util
+import urllib3
+from tenacity import retry, retry_if_exception_type, before_log, after_log
 
 try:
     __import__("elasticsearch")
@@ -174,15 +176,15 @@ class DocManager(DocManagerBase):
     """
 
     def __init__(
-        self,
-        url,
-        auto_commit_interval=DEFAULT_COMMIT_INTERVAL,
-        unique_key="_id",
-        chunk_size=DEFAULT_MAX_BULK,
-        meta_index_name="mongodb_meta",
-        meta_type="mongodb_meta",
-        attachment_field="content",
-        **kwargs
+            self,
+            url,
+            auto_commit_interval=DEFAULT_COMMIT_INTERVAL,
+            unique_key="_id",
+            chunk_size=DEFAULT_MAX_BULK,
+            meta_index_name="mongodb_meta",
+            meta_type="mongodb_meta",
+            attachment_field="content",
+            **kwargs
     ):
         client_options = kwargs.get("clientOptions", {})
         if "aws" in kwargs:
@@ -278,8 +280,8 @@ class DocManager(DocManagerBase):
                     (
                         dict(result, _op_type="delete")
                         for result in scan(
-                            self.elastic, index=db.lower(), doc_type=coll
-                        )
+                        self.elastic, index=db.lower(), doc_type=coll
+                    )
                     ),
                 )
                 for ok, resp in responses:
@@ -289,6 +291,8 @@ class DocManager(DocManagerBase):
                             "ent during handling of 'drop' command: %r" % resp
                         )
 
+    @retry(retry=retry_if_exception_type(errors.ConnectionFailed), before=before_log(LOG, logging.DEBUG),
+           after=after_log(LOG, logging.DEBUG))
     @wrap_exceptions
     def update(self, document_id, update_spec, namespace, timestamp):
         """Apply updates given in update_spec to the document whose id
@@ -317,6 +321,8 @@ class DocManager(DocManagerBase):
         # upsert() strips metadata, so only _id + fields in _source still here
         return updated
 
+    @retry(retry=retry_if_exception_type(errors.ConnectionFailed), before=before_log(LOG, logging.DEBUG),
+           after=after_log(LOG, logging.DEBUG))
     @wrap_exceptions
     def upsert(self, doc, namespace, timestamp, update_spec=None):
         """Insert a document into Elasticsearch."""
@@ -347,6 +353,8 @@ class DocManager(DocManagerBase):
         # Leave _id, since it's part of the original document
         doc["_id"] = doc_id
 
+    @retry(retry=retry_if_exception_type(errors.ConnectionFailed), before=before_log(LOG, logging.DEBUG),
+           after=after_log(LOG, logging.DEBUG))
     @wrap_exceptions
     def bulk_upsert(self, docs, namespace, timestamp):
         """Insert multiple documents into Elasticsearch."""
@@ -399,6 +407,8 @@ class DocManager(DocManagerBase):
             # config file, but nothing to dump
             pass
 
+    @retry(retry=retry_if_exception_type(errors.ConnectionFailed), before=before_log(LOG, logging.DEBUG),
+           after=after_log(LOG, logging.DEBUG))
     @wrap_exceptions
     def insert_file(self, f, namespace, timestamp):
         doc = f.get_metadata()
@@ -433,6 +443,8 @@ class DocManager(DocManagerBase):
 
         self.index(action, meta_action)
 
+    @retry(retry=retry_if_exception_type(errors.ConnectionFailed), before=before_log(LOG, logging.DEBUG),
+           after=after_log(LOG, logging.DEBUG))
     @wrap_exceptions
     def remove(self, document_id, namespace, timestamp):
         """Remove a document from Elasticsearch."""
@@ -458,7 +470,7 @@ class DocManager(DocManagerBase):
     def _stream_search(self, *args, **kwargs):
         """Helper method for iterating over ES search results."""
         for hit in scan(
-            self.elastic, query=kwargs.pop("body", None), scroll="10m", **kwargs
+                self.elastic, query=kwargs.pop("body", None), scroll="10m", **kwargs
         ):
             hit["_source"]["_id"] = hit["_id"]
             yield hit["_source"]
@@ -480,8 +492,8 @@ class DocManager(DocManagerBase):
 
         # Divide by two to account for meta actions
         if (
-            len(self.BulkBuffer.action_buffer) / 2 >= self.chunk_size
-            or self.auto_commit_interval == 0
+                len(self.BulkBuffer.action_buffer) / 2 >= self.chunk_size
+                or self.auto_commit_interval == 0
         ):
             self.commit()
 
